@@ -1,0 +1,19 @@
+# Generated data artifacts (regenerate with ./run.sh)
+data/
+*.idx
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.eggs/
+*.egg-info/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Vercel
+.vercel/
