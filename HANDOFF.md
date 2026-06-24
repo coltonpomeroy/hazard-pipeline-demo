@@ -13,6 +13,18 @@ is verifiable. Stop and ask if a step fails in a way these notes don't cover.
 - Python 3.11+ and the deps in `requirements.txt` are only needed to *regenerate*
   data (Step 1). The committed `index.html` already works without them.
 
+## Step 0 — Put the repo in the right place
+Colton keeps his projects together in one developer folder (the same parent that
+holds Free Flick Football, MotsActu, etc.). Detect that folder — list the
+likely parents and pick the one containing his existing repos:
+```bash
+ls -d ~/Developer ~/dev ~/Projects ~/code ~/repos 2>/dev/null
+```
+Move the unzipped `hazard-pipeline-demo` directory into that folder if it isn't
+already there, then `cd` into it. If you can't confidently identify the folder,
+ask Colton for the path rather than guessing. The committed `.git` history is
+already in place — don't re-init unless Colton asks.
+
 ## Step 1 — Sanity-check the build (optional but preferred)
 ```bash
 pip install -r requirements.txt        # eccodes/rasterio wheels; skip if heavy
