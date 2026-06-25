@@ -1,0 +1,50 @@
+name: Refresh HRRR hazard data
+
+# Rebuilds the live page from the latest NOAA HRRR cycle every hour, then
+# pushes the regenerated artifacts to main. Vercel's GitHub integration
+# auto-deploys on that push, so the public demo always shows a recent run.
+on:
+  schedule:
+    - cron: "30 * * * *"   # hourly; HRRR latency makes the exact minute moot
+  workflow_dispatch: {}      # allow manual "Run workflow" from the Actions tab
+
+permissions:
+  contents: write            # let the built-in token push the refreshed data
+
+concurrency:
+  group: refresh-hrrr
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # cfgrib needs the ecCodes C library; apt provides it on the runner.
+      - name: Install ecCodes
+        run: sudo apt-get update && sudo apt-get install -y libeccodes0 libeccodes-dev
+
+      - name: Install Python deps
+        run: pip install -r requirements.txt
+
+      - name: Regenerate from the latest HRRR cycle
+        run: |
+          python -W ignore -m hazpipe.pipeline
+          python -W ignore -m hazpipe.build_map_demo
+
+      - name: Commit & push if the data changed
+        run: |
+          git config user.name "hazpipe-bot"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add index.html warnings.geojson
+          if git diff --cached --quiet; then
+            echo "No change in hazard data this cycle."
+          else
+            git commit -m "chore(data): refresh HRRR hazard zones"
+            git push
+          fi
