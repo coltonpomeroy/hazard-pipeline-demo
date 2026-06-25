@@ -158,11 +158,10 @@
       GeoJSON &mdash; EPSG:4326, ready for PostGIS and this MapLibre map.</li>
     </ol>
     <p class="about-note"><b>This is live data.</b> The map shows the most recent
-    real <b>HRRR</b> wind-gust cycle fetched from <b>NOAA NOMADS</b> at build time.
-    HRRR ships on a Lambert Conformal grid, so the one adaptation versus the
-    earlier synthetic build is a reprojection step onto a regular EPSG:4326 grid;
-    everything downstream of ingest is unchanged. The synthetic generator is kept
-    as an offline fallback so the pipeline still runs if NOMADS is unreachable.</p>
+    real <b>HRRR</b> wind-gust forecast, pulled straight from <b>NOAA</b> when the
+    page was built &mdash; the zones are whatever NOAA's 3&nbsp;km model is
+    forecasting right now, and the view auto-centers on wherever the strongest
+    gusts are.</p>
   </div>
 </div>
 
