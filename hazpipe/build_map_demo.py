@@ -135,7 +135,8 @@ TEMPLATE = """<!DOCTYPE html>
         </div>
         <div class="valid" id="valid"></div>
         <div class="scrub">
-          <input type="range" id="slider" min="{min_h}" max="{max_h}" step="1" value="{min_h}" />
+          <input type="range" id="slider" min="{min_h}" max="{max_h}" step="0.02" value="{min_h}" />
+          <button class="play" id="speed" title="Playback speed">1&times;</button>
         </div>
       </div>
       <div class="row" id="tiers"></div>
@@ -191,8 +192,12 @@ const TIERS = [
 ];
 const HOURS = {hours};
 const BOUNDS = {bounds};
-let current = HOURS[0];
-let playing = false, timer = null;
+const H0 = HOURS[0], HN = HOURS[HOURS.length - 1];
+const FIRST_VALID = (COUNTS[H0] && COUNTS[H0].valid) || null;
+const HOURS_PER_SEC = 1.1;          // forecast-hours advanced per real second at 1x
+const SPEEDS = [1, 2, 4];
+let T = H0;                          // continuous forecast-hour position
+let speed = 1, playing = false, rafId = null, lastTs = 0, dragging = false;
 
 // Render a UTC ISO timestamp (e.g. "2026-06-25T14:00:00Z") in the viewer's
 // own local time, with the timezone shown (e.g. "Jun 25, 9:00 AM CDT").
@@ -252,12 +257,18 @@ map.on("load", () => {{
     }}
   }});
 
-  setHour(current);
   // Frame wherever today's hazards actually are (auto-find active wind).
   map.fitBounds(BOUNDS, {{ padding: 48, duration: 0, maxZoom: 7 }});
+  applyFrame();
+  play();                              // animate the run on load
 
   map.on("click", "warn-fill", (e) => {{
-    const p = e.features[0].properties;
+    // Several forecast hours overlap in space; show the one nearest the
+    // currently-animated time.
+    const f = e.features.slice().sort((a, b) =>
+      Math.abs(a.properties.forecast_hour - T) -
+      Math.abs(b.properties.forecast_hour - T))[0];
+    const p = f.properties;
     new maplibregl.Popup()
       .setLngLat(e.lngLat)
       .setHTML(
@@ -270,18 +281,33 @@ map.on("load", () => {{
   map.on("mouseleave", "warn-fill", () => map.getCanvas().style.cursor = "");
 }});
 
-function setHour(h) {{
-  current = h;
-  const filter = ["==", ["get", "forecast_hour"], h];
-  if (map.getLayer("warn-fill")) map.setFilter("warn-fill", filter);
-  if (map.getLayer("warn-line")) map.setFilter("warn-line", filter);
+// Opacity as a function of how far each zone's forecast hour is from the
+// current animated time T -- zones at T are fully shown and crossfade to their
+// neighbours, so playback is continuous rather than snapping hour to hour.
+function fadeExpr(peak) {{
+  return ["interpolate", ["linear"],
+    ["abs", ["-", ["get", "forecast_hour"], T]],
+    0, peak, 1, 0];
+}}
 
+function applyFrame() {{
+  if (map.getLayer("warn-fill")) map.setPaintProperty("warn-fill", "fill-opacity", fadeExpr(0.5));
+  if (map.getLayer("warn-line")) map.setPaintProperty("warn-line", "line-opacity", fadeExpr(0.95));
+
+  const hr = Math.round(T);
   document.getElementById("fhr").innerHTML =
-    `F${{String(h).padStart(2,"0")}} <small>fcst hr</small>`;
-  const meta = COUNTS[h] || {{ valid: "", counts: {{}} }};
-  document.getElementById("valid").textContent = "valid " + fmtLocal(meta.valid);
-  document.getElementById("slider").value = h;
+    `F${{String(hr).padStart(2,"0")}} <small>fcst hr</small>`;
 
+  // Smoothly ticking valid-time clock interpolated from the first frame.
+  let validStr = "";
+  if (FIRST_VALID) {{
+    const ms = new Date(FIRST_VALID).getTime() + (T - H0) * 3600000;
+    validStr = fmtLocal(new Date(ms).toISOString());
+  }}
+  document.getElementById("valid").textContent = "valid " + validStr;
+  if (!dragging) document.getElementById("slider").value = T;
+
+  const meta = COUNTS[hr] || {{ counts: {{}} }};
   const box = document.getElementById("tiers");
   box.innerHTML = TIERS.map(t => {{
     const n = (meta.counts && meta.counts[t.cls]) || 0;
@@ -293,19 +319,40 @@ function setHour(h) {{
   }}).join("");
 }}
 
-document.getElementById("slider").addEventListener("input", (e) => {{
-  stop(); setHour(parseInt(e.target.value, 10));
-}});
-
-function step() {{
-  const i = HOURS.indexOf(current);
-  setHour(HOURS[(i + 1) % HOURS.length]);
+function loop(ts) {{
+  if (!playing) return;
+  if (!lastTs) lastTs = ts;
+  T += ((ts - lastTs) / 1000) * HOURS_PER_SEC * speed;
+  lastTs = ts;
+  if (T > HN) T = H0;                 // loop back to the start of the run
+  applyFrame();
+  rafId = requestAnimationFrame(loop);
 }}
-function play() {{ playing = true; document.getElementById("play").innerHTML = "&#10073;&#10073;";
-  timer = setInterval(step, 900); }}
-function stop() {{ playing = false; document.getElementById("play").innerHTML = "&#9654;";
-  if (timer) clearInterval(timer); timer = null; }}
+function play() {{
+  playing = true; lastTs = 0;
+  document.getElementById("play").innerHTML = "&#10073;&#10073;";
+  rafId = requestAnimationFrame(loop);
+}}
+function stop() {{
+  playing = false;
+  document.getElementById("play").innerHTML = "&#9654;";
+  if (rafId) cancelAnimationFrame(rafId);
+  rafId = null;
+}}
 document.getElementById("play").addEventListener("click", () => playing ? stop() : play());
+
+const slider = document.getElementById("slider");
+slider.addEventListener("input", (e) => {{
+  dragging = true; stop();
+  T = parseFloat(e.target.value);
+  applyFrame();
+}});
+slider.addEventListener("change", () => {{ dragging = false; }});
+
+document.getElementById("speed").addEventListener("click", () => {{
+  speed = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length];
+  document.getElementById("speed").textContent = speed + "×";
+}});
 
 // About overlay
 const about = document.getElementById("about");

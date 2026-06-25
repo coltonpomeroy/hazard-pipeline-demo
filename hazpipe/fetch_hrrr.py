@@ -51,7 +51,7 @@ def _download(init: datetime, fhr: int, dest: str, timeout: int = 90) -> bool:
     return True
 
 
-def fetch_hrrr(data_dir: str = "data", n_steps: int = 6,
+def fetch_hrrr(data_dir: str = "data", n_steps: int = 12,
                max_lookback: int = 8) -> dict:
     """Download HRRR surface gust for F01..F{n_steps} from the most recent
     available cycle.
