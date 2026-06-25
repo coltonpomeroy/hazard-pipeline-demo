@@ -194,6 +194,18 @@ const BOUNDS = {bounds};
 let current = HOURS[0];
 let playing = false, timer = null;
 
+// Render a UTC ISO timestamp (e.g. "2026-06-25T14:00:00Z") in the viewer's
+// own local time, with the timezone shown (e.g. "Jun 25, 9:00 AM CDT").
+function fmtLocal(iso) {{
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  return d.toLocaleString(undefined, {{
+    month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+    timeZoneName: "short"
+  }});
+}}
+
 const map = new maplibregl.Map({{
   container: "map",
   style: {{
@@ -251,7 +263,7 @@ map.on("load", () => {{
       .setHTML(
         `${{p.hazard_class.replace(/_/g," ")}}<br>` +
         `peak gust ${{p.peak_gust_mph}} mph<br>` +
-        `valid ${{p.valid_time}}`
+        `valid ${{fmtLocal(p.valid_time)}}`
       ).addTo(map);
   }});
   map.on("mouseenter", "warn-fill", () => map.getCanvas().style.cursor = "pointer");
@@ -267,7 +279,7 @@ function setHour(h) {{
   document.getElementById("fhr").innerHTML =
     `F${{String(h).padStart(2,"0")}} <small>fcst hr</small>`;
   const meta = COUNTS[h] || {{ valid: "", counts: {{}} }};
-  document.getElementById("valid").textContent = "valid " + (meta.valid || "");
+  document.getElementById("valid").textContent = "valid " + fmtLocal(meta.valid);
   document.getElementById("slider").value = h;
 
   const box = document.getElementById("tiers");

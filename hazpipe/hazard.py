@@ -26,7 +26,7 @@ from datetime import datetime, timedelta
 
 import numpy as np
 import xarray as xr
-from rasterio.features import shapes
+from rasterio.features import shapes, rasterize
 from rasterio.transform import from_origin
 from shapely.geometry import shape, mapping
 
@@ -84,7 +84,15 @@ def derive_warnings(ds: xr.Dataset, cycle_init: datetime | None = None) -> dict:
 
         for tier in HAZARD_TIERS:
             for poly in _polygonize_tier(arr, transform, tier["min_mph"]):
-                peak = float(np.nanmax(arr[arr >= tier["min_mph"]]))
+                # Peak gust *inside this polygon* -- rasterize the polygon back
+                # to a cell mask and take the max there. (Using the whole-field
+                # max would give every zone in a step the same number.)
+                cell_mask = rasterize(
+                    [(poly, 1)], out_shape=arr.shape, transform=transform,
+                    fill=0, dtype="uint8").astype(bool)
+                vals = arr[cell_mask]
+                vals = vals[np.isfinite(vals)]
+                peak = float(vals.max()) if vals.size else float(tier["min_mph"])
                 features.append({
                     "type": "Feature",
                     "geometry": mapping(poly),
