@@ -36,16 +36,25 @@ Open **`index.html`** for an interactive console: a forecast-hour
 scrubber animates the warning zones across the run, and an "About" panel on the
 page summarizes what each pipeline stage does.
 
-## Honest scope
+## Data source
 
-This environment can't reach NOAA's feeds, so the forecast **values are
-synthetic** — a modelled gust front, not a real model run. Everything *around*
-the values is the real thing: the data is encoded as genuine GRIB2 via ecCodes,
-read back through the exact `xarray`/`cfgrib` path you'd use in production,
-rechunked to real Zarr, and polygonized with `rasterio`. To run it on live data
-you swap one module (`generate_forecast.py`) for a NOMADS / AWS-Open-Data fetch;
-nothing downstream changes. The synthetic generator is the seam, and it's
-isolated on purpose.
+The demo runs on **real NOAA data**. At build time it fetches the most recent
+**HRRR** (3 km CONUS) surface wind-gust cycle from **NOMADS** (`fetch_hrrr.py`),
+reads it through the exact `xarray`/`cfgrib` path, persists NetCDF + Zarr,
+thresholds and polygonizes with `rasterio`, and renders the result. The map you
+see is whatever gusts NOAA's latest run is forecasting — the build auto-frames
+wherever today's wind hazards actually are.
+
+HRRR ships on a Lambert Conformal grid, so there is **one** adaptation versus a
+plain regular-grid feed: a reprojection step (`regrid.py`) resamples the
+curvilinear field onto a regular EPSG:4326 grid by max-binning (the right
+reducer for a hazard product — it never washes out a peak gust). Everything
+downstream of ingest is unchanged.
+
+`generate_forecast.py` — which encodes a synthetic gust front as genuine GRIB2
+via ecCodes — is kept as an **offline fallback**: if NOMADS is unreachable, the
+pipeline still produces output (`source="synthetic"` forces it, `"hrrr"`
+requires live data, `"auto"` is the default).
 
 ## How it maps to the platform stack
 
@@ -60,10 +69,15 @@ isolated on purpose.
 
 ## Run it
 
+`cfgrib` needs the **ecCodes C library** (the Python package only provides
+bindings). On macOS: `brew install eccodes`; on Debian/Ubuntu:
+`apt-get install libeccodes0`. `run.sh` auto-detects a Homebrew install and
+points `ECCODES_DIR` at it.
+
 ```bash
 pip install -r requirements.txt
 ./run.sh
-# then open output/index.html
+# then open index.html  (needs network — fetches the latest live HRRR cycle)
 ```
 
 Or step by step:
@@ -82,7 +96,9 @@ warnings.geojson         pipeline output (PostGIS / MapLibre ready)
 hazard_preview.png       static preview montage
 vercel.json              zero-build static deploy config
 hazpipe/
-  generate_forecast.py   synthetic forecast -> real GRIB2  (the swappable seam)
+  fetch_hrrr.py          live HRRR gust from NOAA NOMADS  (the real source)
+  generate_forecast.py   synthetic forecast -> real GRIB2  (offline fallback)
+  regrid.py              HRRR Lambert grid -> regular EPSG:4326 (max-binning)
   ingest.py              GRIB2 -> clean xarray Dataset
   store.py               NetCDF archive + cloud-native Zarr (chunking strategy)
   hazard.py              threshold -> polygonize -> attributed GeoJSON

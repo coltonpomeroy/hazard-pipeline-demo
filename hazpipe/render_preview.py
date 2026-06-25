@@ -13,14 +13,16 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 import numpy as np
+import xarray as xr
 from shapely.geometry import shape
 
-from hazpipe.ingest import load_grib2
 from hazpipe.hazard import derive_warnings, HAZARD_TIERS
 
 
-def render(grib_path: str, out_png: str) -> str:
-    ds = load_grib2(grib_path)
+def render(nc_path: str, out_png: str) -> str:
+    # Render from the cube the pipeline persisted, so the preview always
+    # matches whatever source ran (live HRRR or synthetic fallback).
+    ds = xr.open_dataset(nc_path)
     fc = derive_warnings(ds)
     da = ds.gust_mph
 
@@ -71,7 +73,7 @@ def render(grib_path: str, out_png: str) -> str:
     fig.colorbar(im, ax=axes.tolist(), shrink=0.6, label="wind gust (mph)",
                  location="right")
     fig.suptitle(
-        "Wind-gust hazard zones derived from GRIB2 forecast (synthetic demo data)",
+        "Wind-gust hazard zones derived from a live NOAA HRRR GRIB2 forecast",
         fontsize=13, y=1.0)
     fig.savefig(out_png, dpi=130, bbox_inches="tight")
     plt.close(fig)
@@ -79,5 +81,5 @@ def render(grib_path: str, out_png: str) -> str:
 
 
 if __name__ == "__main__":
-    p = render("data/gust_forecast.grib2", "hazard_preview.png")
+    p = render("data/gust_forecast.nc", "hazard_preview.png")
     print(f"wrote {p}")

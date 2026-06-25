@@ -76,18 +76,20 @@ word-for-word. `[ ]` lines are on-screen actions.
 
 ---
 
-## 2:20 — Honest scope (25s)
+## 2:20 — It's live data (25s)
 
-> "One thing I want to be straight about: my sandbox couldn't reach NOAA's live
-> feeds, so the forecast *values* here are synthetic — a modeled gust front, not
-> a real model run. But everything around the values is the real deal: it's
-> encoded as genuine GRIB2, read through the real libraries, real Zarr chunking,
-> real polygonization."
+> "And to be clear — this isn't canned. Every time the page is built it pulls the
+> most recent *real* HRRR cycle from NOAA NOMADS. The zones you're looking at are
+> what NOAA's 3 km model is actually forecasting right now; the map auto-frames
+> wherever today's wind hazards are."
 
-`[ Point at the generate_forecast.py file in the repo ]`
+`[ Point at fetch_hrrr.py and regrid.py in the repo ]`
 
-> "Going live just means swapping this one module for a NOMADS fetch. Nothing
-> downstream changes — I isolated that seam on purpose."
+> "HRRR comes on a Lambert Conformal grid, so the one thing I added versus a plain
+> feed is a reprojection step onto a regular lat/lon grid — and I max-bin it, so a
+> peak gust never gets averaged away. Everything downstream of ingest is unchanged.
+> I also kept the synthetic generator as an offline fallback, so the pipeline still
+> runs end-to-end if NOMADS is ever down mid-demo."
 
 ---
 
