@@ -8,7 +8,7 @@ I built this to get hands-on with the geospatial raster side of the platform —
 NetCDF, GRIB2, and Zarr — and to show how that data flows from a model cycle all
 the way to something an operator (or an incident system) can act on.
 
-**Live demo:** _(add your Vercel URL here once deployed)_
+**Live demo:** https://hazard-pipeline-demo.vercel.app
 
 ```
  GRIB2 forecast ──► xarray/cfgrib ──► NetCDF + Zarr (S3-style chunks)
