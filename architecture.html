@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Staging Architecture — Weather Data for Viz + Workflows</title>
+<style>
+  :root {
+    --bg: #0b0f14; --panel: #121821; --edge: #1f2935; --ink: #e6edf3;
+    --dim: #8b9aa9; --teal: #38d6c4; --amber: #e8a33d;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+    --sans: "Inter", system-ui, -apple-system, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink);
+    font-family: var(--sans); }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 30px 24px 48px; }
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .18em;
+    text-transform: uppercase; color: var(--teal); }
+  h1 { font-size: 23px; margin: 8px 0 6px; letter-spacing: -.015em; }
+  .sub { color: var(--dim); font-size: 14px; max-width: 70ch; line-height: 1.5; }
+  svg { width: 100%; height: auto; margin: 22px 0 8px; }
+  .legend { font-family: var(--mono); font-size: 11.5px; color: var(--dim);
+    display: flex; gap: 22px; flex-wrap: wrap; margin: 4px 0 26px; }
+  .legend i { display: inline-block; width: 11px; height: 11px; border-radius: 3px;
+    margin-right: 7px; vertical-align: -1px; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  .card { background: var(--panel); border: 1px solid var(--edge);
+    border-radius: 12px; padding: 18px 20px; }
+  .card h2 { font-size: 15px; margin: 0 0 8px; }
+  .card p { color: var(--dim); font-size: 13.5px; line-height: 1.6; margin: 0; }
+  .card b { color: var(--ink); font-weight: 600; }
+  .foot { color: #455160; font-size: 11px; font-family: var(--mono);
+    margin-top: 30px; }
+  @media (max-width: 720px) { .cols { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="eyebrow">hazpipe // architecture sketch</span>
+  <h1>Staging raw weather data for visualization <i>and</i> workflows</h1>
+  <p class="sub">One ingest of the raw model data on S3, split into two tracks: a
+  fast visual path for smooth maps and animation, and a queryable path that
+  business logic can act on. Decoupling <b>render</b> from <b>query</b> is what a
+  visualization-only API can't give you.</p>
+
+  <svg viewBox="0 0 1000 560" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="ttl desc">
+    <title id="ttl">Dual-track weather data staging architecture</title>
+    <desc id="desc">Raw NOAA data on S3 is ingested and normalized in a staging layer, then split into a fast visual track (Zarr and tiles to a CDN, feeding a MapLibre/deck.gl map and animation) and a queryable track (vectorized into PostGIS and a time-series database, feeding workflows like alerts, asset overlays, triggers and an API). Both serve end users who act on the data. The current demo covers the ingest-to-hazard-zones spine.</desc>
+
+    <defs>
+      <marker id="a" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+        <path d="M0,0 L9,4.5 L0,9 z" fill="#5b6b7a"/>
+      </marker>
+      <marker id="at" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+        <path d="M0,0 L9,4.5 L0,9 z" fill="#38d6c4"/>
+      </marker>
+      <marker id="am" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+        <path d="M0,0 L9,4.5 L0,9 z" fill="#e8a33d"/>
+      </marker>
+    </defs>
+
+    <!-- flow arrows -->
+    <line x1="205" y1="270" x2="247" y2="270" stroke="#5b6b7a" stroke-width="2" marker-end="url(#a)"/>
+    <path d="M452,250 C480,250 480,150 505,150" fill="none" stroke="#38d6c4" stroke-width="2" marker-end="url(#at)"/>
+    <path d="M452,290 C480,290 480,390 505,390" fill="none" stroke="#e8a33d" stroke-width="2" marker-end="url(#am)"/>
+    <line x1="715" y1="150" x2="753" y2="150" stroke="#38d6c4" stroke-width="2" marker-end="url(#at)"/>
+    <line x1="715" y1="390" x2="753" y2="390" stroke="#e8a33d" stroke-width="2" marker-end="url(#am)"/>
+    <path d="M862,192 C862,300 720,300 720,470" fill="none" stroke="#5b6b7a" stroke-width="1.6" marker-end="url(#a)"/>
+    <path d="M862,432 C862,452 760,452 740,470" fill="none" stroke="#5b6b7a" stroke-width="1.6" marker-end="url(#a)"/>
+
+    <!-- 1. Source -->
+    <rect x="30" y="205" width="175" height="130" rx="11" fill="#121821" stroke="#1f2935" stroke-width="1.5"/>
+    <text x="117" y="235" text-anchor="middle" fill="#e6edf3" font-size="15" font-weight="650">Raw data on S3</text>
+    <text x="117" y="258" text-anchor="middle" fill="#8b9aa9" font-size="11.5">NOAA open data</text>
+    <text x="117" y="284" text-anchor="middle" fill="#8b9aa9" font-size="11.5" font-family="ui-monospace,Menlo,monospace">GRIB2 · Zarr</text>
+    <text x="117" y="306" text-anchor="middle" fill="#8b9aa9" font-size="11.5">HRRR · MRMS · GOES</text>
+
+    <!-- 2. Staging (the role) -->
+    <rect x="247" y="220" width="205" height="100" rx="11" fill="#10201e" stroke="#38d6c4" stroke-width="2"/>
+    <text x="349" y="250" text-anchor="middle" fill="#e6edf3" font-size="15" font-weight="700">Staging layer</text>
+    <text x="349" y="272" text-anchor="middle" fill="#9fe1cb" font-size="11.5">ingest + normalize</text>
+    <text x="349" y="294" text-anchor="middle" fill="#8b9aa9" font-size="11">one xarray model · the mastermind</text>
+
+    <!-- 3a. Visual track -->
+    <rect x="505" y="110" width="210" height="82" rx="11" fill="#121821" stroke="#2a6e66" stroke-width="1.5"/>
+    <text x="610" y="138" text-anchor="middle" fill="#e6edf3" font-size="14" font-weight="650">Visual track — fast</text>
+    <text x="610" y="160" text-anchor="middle" fill="#8b9aa9" font-size="11.5">rechunk Zarr · pre-tiled</text>
+    <text x="610" y="178" text-anchor="middle" fill="#8b9aa9" font-size="11.5">vector + raster tiles → CDN</text>
+
+    <!-- 3b. Queryable track -->
+    <rect x="505" y="349" width="210" height="82" rx="11" fill="#121821" stroke="#7a5a23" stroke-width="1.5"/>
+    <text x="610" y="377" text-anchor="middle" fill="#e6edf3" font-size="14" font-weight="650">Queryable track</text>
+    <text x="610" y="399" text-anchor="middle" fill="#8b9aa9" font-size="11.5">vectorize → PostGIS</text>
+    <text x="610" y="417" text-anchor="middle" fill="#8b9aa9" font-size="11.5">+ time-series store</text>
+
+    <!-- 4a. Viz -->
+    <rect x="753" y="110" width="217" height="82" rx="11" fill="#121821" stroke="#1f2935" stroke-width="1.5"/>
+    <text x="861" y="138" text-anchor="middle" fill="#e6edf3" font-size="14" font-weight="650">Map &amp; animation</text>
+    <text x="861" y="160" text-anchor="middle" fill="#8b9aa9" font-size="11.5">MapLibre / deck.gl</text>
+    <text x="861" y="178" text-anchor="middle" fill="#8b9aa9" font-size="11.5">scrub · loop · 3D</text>
+
+    <!-- 4b. Workflows -->
+    <rect x="753" y="349" width="217" height="82" rx="11" fill="#121821" stroke="#1f2935" stroke-width="1.5"/>
+    <text x="861" y="377" text-anchor="middle" fill="#e6edf3" font-size="14" font-weight="650">Workflows</text>
+    <text x="861" y="399" text-anchor="middle" fill="#8b9aa9" font-size="11.5">alerts · asset overlays</text>
+    <text x="861" y="417" text-anchor="middle" fill="#8b9aa9" font-size="11.5">triggers · API</text>
+
+    <!-- 5. End users -->
+    <rect x="505" y="470" width="465" height="62" rx="11" fill="#121821" stroke="#1f2935" stroke-width="1.5"/>
+    <text x="737" y="498" text-anchor="middle" fill="#e6edf3" font-size="14" font-weight="650">End users — acting on the data</text>
+    <text x="737" y="518" text-anchor="middle" fill="#8b9aa9" font-size="11.5">emergency mgmt · utilities · insurers · asset owners</text>
+
+    <!-- demo spine callout -->
+    <rect x="30" y="372" width="437" height="120" rx="11" fill="none" stroke="#38d6c4" stroke-width="1.3" stroke-dasharray="4 4" opacity="0.6"/>
+    <text x="40" y="468" fill="#38d6c4" font-size="11.5" font-family="ui-monospace,Menlo,monospace">this demo = the spine</text>
+    <text x="40" y="485" fill="#8b9aa9" font-size="11">HRRR → cube → Zarr + vector hazard zones → animated map</text>
+  </svg>
+
+  <div class="legend">
+    <span><i style="background:#38d6c4"></i>fast visual path</span>
+    <span><i style="background:#e8a33d"></i>queryable data path</span>
+    <span><i style="background:#10201e;border:1px solid #38d6c4"></i>where I come in</span>
+  </div>
+
+  <div class="cols">
+    <div class="card">
+      <h2>Why two tracks</h2>
+      <p>A visualization-only API (e.g. Aguacero's) hands you a <b>layer to draw</b>,
+      not records you can query. The moment the job is <b>act on the data</b> —
+      alert when gust &gt; X over these assets, store every cycle to query history,
+      join weather to a customer's locations — you need the data in a database, not
+      a tile. One ingest feeds both: tiles/Zarr for buttery animation, PostGIS +
+      time-series for the workflows.</p>
+    </div>
+    <div class="card">
+      <h2>Where the live demo sits</h2>
+      <p>The demo is a working slice of the <b>spine</b>: it pulls real HRRR from
+      NOAA, normalizes it, rechunks to Zarr, and turns the gust field into vector
+      hazard zones that animate on a MapLibre map — already EPSG:4326 and
+      PostGIS-ready. The next build-out is the tiling layer for high-res animation
+      and the DB layer the workflows run on.</p>
+    </div>
+  </div>
+
+  <div class="foot">Colton Pomeroy · concept sketch · hazard-pipeline-demo.vercel.app</div>
+</div>
+</body>
+</html>
